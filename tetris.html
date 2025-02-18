@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Three.js Tetris</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script>
+      // Scene setup
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+      );
+      const renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // Game grid (10x20)
+      const GRID_WIDTH = 10;
+      const GRID_HEIGHT = 20;
+      const BLOCK_SIZE = 1;
+      const grid = new Array(GRID_HEIGHT)
+        .fill()
+        .map(() => new Array(GRID_WIDTH).fill(0));
+
+      // Tetromino shapes
+      const SHAPES = [
+        [[1, 1, 1, 1]], // I
+        [
+          [1, 1],
+          [1, 1],
+        ], // O
+        [
+          [1, 1, 1],
+          [0, 1, 0],
+        ], // T
+        [
+          [1, 1, 1],
+          [1, 0, 0],
+        ], // L
+        [
+          [1, 1, 1],
+          [0, 0, 1],
+        ], // J
+        [
+          [1, 1, 0],
+          [0, 1, 1],
+        ], // S
+        [
+          [0, 1, 1],
+          [1, 1, 0],
+        ], // Z
+      ];
+
+      const COLORS = [
+        0x00ffff, // I - Cyan
+        0xffff00, // O - Yellow
+        0xff00ff, // T - Purple
+        0xff8000, // L - Orange
+        0x0000ff, // J - Blue
+        0x00ff00, // S - Green
+        0xff0000, // Z - Red
+      ];
+
+      // Game state
+      let currentPiece;
+      let currentPosition = { x: 4, y: 0 };
+      let gameOver = false;
+
+      // Create grid visualization
+      const gridGroup = new THREE.Group();
+      scene.add(gridGroup);
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      directionalLight.position.set(0, 1, 1);
+      scene.add(directionalLight);
+
+      camera.position.set(5, 10, 15);
+      camera.lookAt(0, 0, 0);
+
+      class Tetromino {
+        constructor() {
+          this.type = Math.floor(Math.random() * SHAPES.length);
+          this.shape = SHAPES[this.type];
+          this.color = COLORS[this.type];
+          this.group = new THREE.Group();
+          this.createBlocks();
+        }
+
+        createBlocks() {
+          const geometry = new THREE.BoxGeometry(
+            BLOCK_SIZE * 0.9,
+            BLOCK_SIZE * 0.9,
+            BLOCK_SIZE * 0.9
+          );
+          const material = new THREE.MeshPhongMaterial({ color: this.color });
+
+          for (let y = 0; y < this.shape.length; y++) {
+            for (let x = 0; x < this.shape[y].length; x++) {
+              if (this.shape[y][x]) {
+                const block = new THREE.Mesh(geometry, material);
+                block.position.set(x, -y, 0);
+                this.group.add(block);
+              }
+            }
+          }
+        }
+      }
+
+      function spawnPiece() {
+        currentPiece = new Tetromino();
+        currentPosition = { x: Math.floor(GRID_WIDTH / 2) - 1, y: 0 };
+        scene.add(currentPiece.group);
+        updatePiecePosition();
+        if (checkCollision()) {
+          gameOver = true;
+        }
+      }
+
+      function updatePiecePosition() {
+        currentPiece.group.position.set(
+          currentPosition.x * BLOCK_SIZE,
+          (GRID_HEIGHT - currentPosition.y) * BLOCK_SIZE,
+          0
+        );
+      }
+
+      function checkCollision() {
+        for (let y = 0; y < currentPiece.shape.length; y++) {
+          for (let x = 0; x < currentPiece.shape[y].length; x++) {
+            if (currentPiece.shape[y][x]) {
+              const gridX = currentPosition.x + x;
+              const gridY = currentPosition.y + y;
+              if (
+                gridX < 0 ||
+                gridX >= GRID_WIDTH ||
+                gridY >= GRID_HEIGHT ||
+                (gridY >= 0 && grid[gridY][gridX])
+              ) {
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }
+
+      function mergePiece() {
+        for (let y = 0; y < currentPiece.shape.length; y++) {
+          for (let x = 0; x < currentPiece.shape[y].length; x++) {
+            if (currentPiece.shape[y][x]) {
+              const gridX = currentPosition.x + x;
+              const gridY = currentPosition.y + y;
+              if (gridY >= 0) {
+                grid[gridY][gridX] = currentPiece.color;
+                const block = currentPiece.group.children.shift();
+                block.position.set(
+                  gridX * BLOCK_SIZE,
+                  (GRID_HEIGHT - gridY) * BLOCK_SIZE,
+                  0
+                );
+                gridGroup.add(block);
+              }
+            }
+          }
+          scene.remove(currentPiece.group);
+        }
+      }
+
+      function clearLines() {
+        for (let y = GRID_HEIGHT - 1; y >= 0; y--) {
+          if (grid[y].every((cell) => cell !== 0)) {
+            grid.splice(y, 1);
+            grid.unshift(new Array(GRID_WIDTH).fill(0));
+
+            // Update visual representation
+            gridGroup.children.forEach((block) => {
+              if (block.position.y > (GRID_HEIGHT - y - 1) * BLOCK_SIZE) {
+                block.position.y -= BLOCK_SIZE;
+              }
+            });
+          }
+        }
+      }
+
+      // Controls
+      document.addEventListener("keydown", (event) => {
+        if (gameOver) return;
+
+        switch (event.key) {
+          case "ArrowLeft":
+            currentPosition.x--;
+            if (checkCollision()) currentPosition.x++;
+            break;
+          case "ArrowRight":
+            currentPosition.x++;
+            if (checkCollision()) currentPosition.x--;
+            break;
+          case "ArrowDown":
+            currentPosition.y++;
+            if (checkCollision()) {
+              currentPosition.y--;
+              mergePiece();
+              clearLines();
+              spawnPiece();
+            }
+            break;
+          case "ArrowUp":
+            const originalShape = currentPiece.shape;
+            const rotated = [];
+            for (let x = 0; x < originalShape[0].length; x++) {
+              const row = [];
+              for (let y = originalShape.length - 1; y >= 0; y--) {
+                row.push(originalShape[y][x]);
+              }
+              rotated.push(row);
+            }
+            currentPiece.shape = rotated;
+            if (checkCollision()) currentPiece.shape = originalShape;
+            else {
+              scene.remove(currentPiece.group);
+              currentPiece = new Tetromino();
+              currentPiece.type = currentPiece.type;
+              currentPiece.shape = rotated;
+              currentPiece.color = COLORS[currentPiece.type];
+              scene.add(currentPiece.group);
+            }
+            break;
+        }
+        updatePiecePosition();
+      });
+
+      // Game loop
+      let lastTime = 0;
+      let dropCounter = 0;
+      const dropInterval = 1000; // Drop every 1 second
+
+      function animate(time) {
+        if (gameOver) return;
+
+        requestAnimationFrame(animate);
+
+        const delta = time - lastTime;
+        lastTime = time;
+        dropCounter += delta;
+
+        if (dropCounter >= dropInterval) {
+          currentPosition.y++;
+          if (checkCollision()) {
+            currentPosition.y--;
+            mergePiece();
+            clearLines();
+            spawnPiece();
+          }
+          updatePiecePosition();
+          dropCounter = 0;
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      // Start game
+      spawnPiece();
+      animate(0);
+
+      // Handle window resize
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
+  </body>
+</html>
