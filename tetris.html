@@ -17,6 +17,7 @@
     <script>
       // Scene setup
       const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xffffff); // White background
       const camera = new THREE.PerspectiveCamera(
         75,
         window.innerWidth / window.innerHeight,
@@ -83,15 +84,43 @@
       const gridGroup = new THREE.Group();
       scene.add(gridGroup);
 
+      // Add border lines
+      const borderMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+      const borderGeometry = new THREE.BufferGeometry();
+      const vertices = new Float32Array([
+        -0.5,
+        -0.5,
+        0, // Bottom left
+        GRID_WIDTH - 0.5,
+        -0.5,
+        0, // Bottom right
+        GRID_WIDTH - 0.5,
+        GRID_HEIGHT - 0.5,
+        0, // Top right
+        -0.5,
+        GRID_HEIGHT - 0.5,
+        0, // Top left
+        -0.5,
+        -0.5,
+        0, // Back to bottom left
+      ]);
+      borderGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(vertices, 3)
+      );
+      const border = new THREE.Line(borderGeometry, borderMaterial);
+      scene.add(border);
+
       // Lighting
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
       scene.add(ambientLight);
       const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-      directionalLight.position.set(0, 1, 1);
+      directionalLight.position.set(0, 0, 1);
       scene.add(directionalLight);
 
-      camera.position.set(5, 10, 15);
-      camera.lookAt(0, 0, 0);
+      // Camera straight-on view, but with more distance
+      camera.position.set(GRID_WIDTH / 2 - 0.5, GRID_HEIGHT / 2 - 0.5, 20); // Increased the z value to 20
+      camera.lookAt(GRID_WIDTH / 2 - 0.5, GRID_HEIGHT / 2 - 0.5, 0);
 
       class Tetromino {
         constructor() {
@@ -248,7 +277,7 @@
       // Game loop
       let lastTime = 0;
       let dropCounter = 0;
-      const dropInterval = 1000; // Drop every 1 second
+      const dropInterval = 1000;
 
       function animate(time) {
         if (gameOver) return;
